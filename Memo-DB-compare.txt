@@ -1,0 +1,135 @@
+higashiya naoki/0897279/東谷　直樹
+katsume shinji/0712735/勝目　
+mizuno masaki/0473443/水
+nakamura emiko/2203029/中村　
+sekine satoshi/3200553/関根
+shimizu yuuki/0969850/清水　佑記
+toki kazumasa/2106309/土岐
+yamauchi hirotomo/6500389/山内　大知
+zhang lei/0897280/張　磊
+
+非活性
+
+
+ワークフロー統合:
+
+Power Automateでファイル編集イベントをキャプチャ（例：「SharePointのファイルが更新されたとき」トリガー）。
+編集後のファイル内容をDataverseに反映する場合、Power Automateの「ファイルの内容を取得」アクションでファイルを取得し、Dataverseのファイル型列（例：添付ファイルフィールド）に保存。
+承認プロセスでは、Power Automateの「承認」アクションを使用して、編集済みファイルのリンクを承認者に送信。
+
+
+Download
+Launch 
+
+-- 0494938 / YYYYMMDD/　伝票番号/  FileName
+
+
+平行編集：
+１．同じユーザは複数回同じ文書を開く場合、（連打）　　ー　App設計・実装に考慮要
+２．異なるユーザは同じ文書を同時に編集すること　　ー　当面不要だと聞いたが、必要としたら、実現できる。
+３．Power AutomationのFlowの異常処理
+
+
+
+1. PowerAppsでのPostgreSQL接続
+
+ネイティブコネクタ: PowerAppsにはPostgreSQL用のネイティブコネクタが存在しますが、プレミアムライセンスが必要。
+「データ」タブから「PostgreSQL」を選択し、サーバー名、データベース名、ポート（デフォルト：5432）、ユーザー名、パスワードを入力。
+オンプレミスのPostgreSQLの場合、オンプレミスデータゲートウェイが必要。
+カスタムコネクタ: ネイティブコネクタが制約となる場合、ODataやREST API経由で接続するカスタムコネクタを作成。
+
+機能:
+テーブルデータの読み込み、表示、更新が可能。
+Patch関数を使用してデータの作成や更新を行うが、自動インクリメントの主キーには制約あり（後述）。
+承認ワークフローでは、PowerAppsのフォームやギャラリーでPostgreSQLデータを表示し、Power Automateで処理を自動化。
+
+
+2. 添付ファイルの中身の検索：
+2.1. SQL Server 2022でのBLOBデータの保存と内容検索
+データ型: SQL Server 2022では、BLOBデータを保存するために以下のデータ型を使用：
+	VARBINARY(MAX): 最大2GBのバイナリデータを保存（）。
+	FILESTREAM: 大容量ファイル（例：ドキュメント、動画）に適しており、ファイルシステムとデータベースを統合（）。
+	BLOB Storage: Azure SQL Databaseの場合、Azure Blob Storageにファイルを保存し、データベースに参照URLを保存するハイブリッドアプローチ（）。
+
+内容検索の可能性
+	テキストベースのファイル（例：PDF、Word、TXT）:
+
+	全文検索 (Full-Text Search):
+		SQL Serverのフルテキスト検索機能を有効化（CREATE FULLTEXT CATALOG）。
+		VARBINARY(MAX)列に保存されたファイル内容（例：PDF、Word）を抽出するには、iFilter（例：Adobe PDF iFilter）が必要。
+		例: SELECT FileName FROM Documents WHERE CONTAINS(FileContent, '検索キーワード');
+		制限: iFilterはPDFやOfficeファイルに有効だが、画像や暗号化されたファイルは非対応。
+
+	外部ツール: 
+	Power Automateで「ファイルの内容を取得」アクションを使用し、Azure Cognitive SearchやサードパーティOCR（例：Adobe Extract API）でテキスト抽出（）。
+
+
+	非テキストファイル（例：画像、動画）:
+		メタデータ検索のみ可能（例：ファイル名、タグ）。
+		内容検索には、Azure AI VisionやOCRサービスをPower Automateで統合し、画像からテキストを抽出（）。
+
+	PowerAppsでの実装:
+		PowerAppsでVARBINARY(MAX)データを直接表示は困難。ファイルをSharePointやAzure Blob Storageに同期し、URLを介して表示/検索。
+		Power AutomateでSQL Serverからファイルを取得し、内容を解析（例：Azure Cognitive Searchでキーワード検索）。
+
+	考慮点:
+		フルテキスト検索はプレミアム機能ではないが、iFilterの設定や外部ツールの統合には追加コスト（例：Azure Cognitive Searchのライセンス）が発生する可能性。
+		大量データの場合、インデックス作成に時間がかかる。
+		FILESTREAMはファイルシステムアクセスが高速だが、内容検索にはフルテキストインデックスが必要。
+
+2.2 DataverseでのBLOBデータの保存と内容検索
+	データ型:
+		Dataverseでは、ファイル型列（Fileデータ型）またはノート添付（Notesエンティティ）を使用してBLOBデータを保存。
+		File列: 最大4GBのファイルを直接保存（プレミアムライセンスが必要）。
+		Notesエンティティ: ファイル添付として保存（例：PDF、画像）。
+
+
+	内容検索の可能性
+		テキストベースのファイル:
+				ネイティブ検索: Dataverseの標準検索（例：PowerAppsの検索バー、Dataverseのクエリ）はファイル名やメタデータ（例：作成日、タグ）のみ対象。BLOB内容の直接検索は非対応。
+			外部統合:
+				Power AutomateでファイルをSharePointまたはOneDriveに同期し、Office OnlineやAdobe Acrobat Onlineでテキスト抽出。
+				Azure Cognitive Searchを統合し、ファイル内容をインデックス化（例：PDF内のキーワード検索）。
+				例: Power Automateフローで「Dataverseのファイルを取得」→「Azure Cognitive Searchでテキスト抽出」→「検索結果をDataverseに保存」。
+
+		非テキストファイル:
+			画像や動画の内容検索は、Azure AI VisionやOCRサービス（例：Microsoft Vision API）が必要。
+			PowerAppsでファイルを表示し、Power Automateで解析結果をDataverseに保存。
+
+		考慮点:
+			DataverseのFile列はプレミアムライセンスが必要。
+			ファイル内容の検索には、SharePointやAzureサービスとの統合が必須。
+			ストレージ制限（例：Dataverseの容量はライセンスに応じて1GB～数TB）に注意。
+			
+2.3. PostgreSQLでのBLOBデータの保存と内容検索
+データ型:
+	BYTEA: バイナリデータを保存（最大1GB）。
+	Large Object (LOB): 大容量ファイル（最大4TB）に適しているが、専用API（例：lo_import）が必要。
+
+
+内容検索の可能性
+	テキストベースのファイル:
+		全文検索:
+			PostgreSQLのtsvectorとtsqueryを使用し、テキストベースのファイル内容を検索。
+		手順:
+			ファイル内容をテキストとして抽出（例：Power AutomateでPDFをテキストに変換）。
+			抽出テキストをtsvector列に保存（例：CREATE TABLE files (id SERIAL, filename TEXT, file_content BYTEA, search_text TSVECTOR);）。
+			検索例: SELECT filename FROM files WHERE search_text @@ to_tsquery('検索キーワード');
+		外部ツール（例：pg_read_binary_fileやTika）でファイル内容を抽出。
+
+		Power Automate統合:
+			Power Automateで「PostgreSQL - クエリを実行」アクションを使用し、tsvector検索を実行。
+			例: PDF内容をApache TikaやAzure Cognitive Searchで抽出し、PostgreSQLに保存。
+
+	非テキストファイル:
+		画像や動画は、Azure AI VisionやOCRサービスをPower Automateで統合し、抽出されたテキストをtsvectorに保存。
+
+	PowerAppsでの実装:
+		PowerAppsでPostgreSQLのBYTEAデータを直接表示は困難。SharePointやAzure Blob Storageにファイルを同期し、URLを表示。
+		検索は、Power AutomateでPostgreSQLのtsvectorクエリを実行し、結果をPowerAppsに返す。
+
+	考慮点:
+		BYTEAは1GBまで、Large Objectは4TBまでだが、取り扱いが複雑。
+		全文検索にはtsvectorの設定が必要で、前処理（テキスト抽出）が必須。
+		PowerApps/Power AutomateのPostgreSQLコネクタはプレミアムライセンスが必要（）。
+		自動インクリメント問題（SERIAL型）は、Power AutomateでINSERT ... RETURNING idを使用して回避（）。
